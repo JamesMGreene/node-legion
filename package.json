@@ -1,0 +1,39 @@
+{
+  "name": "legion",
+  "version": "0.0.1",
+  "description": "\"I am Legion, for we are many.\" Raise a legion of Node worker processes to do your bidding.",
+  "main": "src/legion.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/JamesMGreene/node-legion.git"
+  },
+  "keywords": [
+    "legion",
+    "army",
+    "supervisor",
+    "cluster",
+    "child_process",
+    "worker",
+    "queue",
+    "chain-gang",
+    "chain",
+    "workforce",
+    "sweatshop",
+    "thread",
+    "pool",
+    "gang"
+  ],
+  "author": {
+    "name": "James M. Greene",
+    "email": "james.m.greene@gmail.com",
+    "url": "http://jamesgreene.net/)"
+  },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/JamesMGreene/node-legion/issues"
+  },
+  "homepage": "https://github.com/JamesMGreene/node-legion",
+  "dependencies": {
+    "node.extend": "^1.0.10"
+  }
+}
