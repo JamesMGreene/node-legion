@@ -24,7 +24,7 @@ var orders = {
 var legion = require('legion');
 legion
   .prepare({
-    mission: path.join(__dirname, 'mission.js')
+    mission: require.resolve('./mission')
   })
   .on('recruit', console.dir)
   .on('terminate', console.dir)
