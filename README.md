@@ -14,31 +14,36 @@ npm install legion
 
 ## Usage
 
+### Main file:
+
 ```js
+var orders = {
+  purpose: 'any JSON-serializable data that you want to provide to your Soldiers'
+};
+
 var legion = require('legion');
 legion
   .prepare({
-    mission: function() {
-      this.emit(
-        'Attempting to kill Ptolemy XIII',
-        {
-          target: 'Ptolemy XIII',
-          location: 'Egypt',
-          battle: 'Battle of the Nile'
-        }
-      );
-      this.done(
-        Date.now() % 2 ?
-        new Error('Soldier was killed in battle') :
-        null
-      );
-    }  
+    mission: path.join(__dirname, 'mission.js')
   })
   .on('recruit', console.dir)
   .on('terminate', console.dir)
-  .toWar();
+  .toWar(orders);
 ```
 
+### "Mission" file for Soldiers:
+
+```js
+var Soldier = require('legion/soldier');
+
+// Enlist the soldier and prepare him/her to receive orders to go to war
+var warfarer =
+  new Soldier()
+    .on('war', function(orders) {
+      this.emit('executing mission');
+      setTimeout(this.terminate.bind(this), 5000);
+    });
+```
 
 ## Configuration Options
 
@@ -81,8 +86,7 @@ var defaultConfig = {
   // Default: `null` (infinite time)
   maxCommission: null,
 
-  // The actual work to do. This MUST be set to a function.
-  // IMPORTANT: The closure scope will not be carried forward for the function must be self-contained.
+  // The actual work to do. This MUST be set to an existing file path.
   // Default: `null`.
   mission: null,
 

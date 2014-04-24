@@ -1,4 +1,5 @@
 // Core modules
+var fs = require('fs');
 var fork = require('child_process').fork;
 
 // Userland modules
@@ -32,12 +33,16 @@ var defaultConfig = {
   // Default: `null` (infinite time)
   maxMissionTime: null,
 
-  // The actual work to do. This MUST be set to a function.
+  // The actual work to do. This MUST be set to an existing file path.
   // Default: `null`.
   mission: null,
 
+  // Optional data to pass to the Soldiers upon recruitment (going to war).
+  // Default: `null`.
+  orders: null,
+
   // Suppress all stdio from child processes
-  // Default: `true`
+  // Default: `true`.
   silent: true
 
 };
@@ -65,8 +70,8 @@ process.on('message', function(msg) {
   if (msg && msg.type === 'recruit' && msg.role === 'century') {
 
     // Rehydrate the `mission` function
-    if (msg && msg.config && typeof msg.config.mission === 'string') {
-      msg.config.mission = Function('return (' + msg.config.mission + ')')();
+    if (msg && msg.config && msg.config.hasOwnProperty("mission") && typeof msg.config.mission !== 'string') {
+      throw new TypeError('The assigned `mission` was not a file path string!');
     }
 
     config = extend({}, defaultConfig, msg.config);
@@ -81,9 +86,15 @@ process.on('message', function(msg) {
 //
 //
 function recruitAllSoldiers() {
-  if (typeof config.mission !== 'function') {
+  if (!(typeof config.mission === 'string' && config.mission)) {
     throw new TypeError('No `mission` was assigned!');
   }
+
+  var missionStats = fs.existsSync(config.mission) === true ? fs.statSync(config.mission) : null;
+  if (!(missionStats && missionStats.isFile())) {
+    throw new TypeError('The assigned `mission` file does not exist');
+  }
+
 
   // Make `maxSoldiers` soldiers for this Century!
   var soldierCount = 0;
@@ -113,7 +124,7 @@ function recruitAllSoldiers() {
 // Soldier's soldier (a.k.a. breeder)
 function recruitSoldier() {
 
-  var soldier = fork(require.resolve('./soldier'), [], { silent: config.silent === true });
+  var soldier = fork(config.mission, [], { silent: config.silent === true });
 
   // Record the employment
   process.send({
@@ -175,7 +186,8 @@ function recruitSoldier() {
     id: soldier.pid,
     group: process.pid,
     config: {
-      mission: config.mission.toString()
+      mission: config.mission,
+      orders: config.orders
     }
   });
 

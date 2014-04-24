@@ -1,5 +1,5 @@
 // Internal modules
-var legion = require('../src/legion');
+var legion = require('../legion');
 
 
 function dumpMessage(msg) {
@@ -8,14 +8,16 @@ function dumpMessage(msg) {
 
 legion
   .prepare({
-    mission: function() {
-      this.emit('executing mission');
-      setTimeout(this.done.bind(this), 5000);
-    },
+    mission: require.resolve('./mission'),
     stagger: true,
-    staggeredStart: 1000,
+    staggeredStart: 2500,
     silent: false
   })
   .on('recruit', dumpMessage)
   .on('terminate', dumpMessage)
-  .toWar();
+  .toWar({
+    missionParameters: 'whatever data',
+    secretObjective: 'you want to send',
+    exitConditions: 'to your soldiers',
+    dirtyJoke: 'can be passed as an object to `toWar`'
+  });

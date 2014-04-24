@@ -1,4 +1,5 @@
 // Core modules
+var fs = require('fs');
 var os = require('os');
 var cluster = require('cluster');
 var util = require('util');
@@ -46,13 +47,12 @@ var defaultConfig = {
   // Default: `null` (infinite time)
   maxCommission: null,
 
-  // The actual work to do. This MUST be set to a function.
-  // IMPORTANT: The closure scope will not be carried forward for the function must be self-contained.
+  // The actual work to do. This MUST be set to an existing file path.
   // Default: `null`.
   mission: null,
 
   // Suppress all stdio from child processes
-  // Default: `true`
+  // Default: `true`.
   silent: true
 
 };
@@ -89,7 +89,7 @@ Legion.prototype.prepare = function(options) {
   }
 
   // If no work was assigned, bail out (unless `mission` was not specified at all)
-  if (options && options.hasOwnProperty('mission') && typeof options.mission !== 'function') {
+  if (options && options.hasOwnProperty('mission') && typeof options.mission !== 'string') {
     throw new TypeError('No `mission` was assigned!');
   }
 
@@ -155,18 +155,19 @@ Legion.prototype.prepare = function(options) {
 //
 // TO WAR!!!
 //
-Legion.prototype.toWar = function(mission) {
+Legion.prototype.toWar = function(orders) {
   if (startTime) {
     throw new Error('Do not call `toWar` more than once!');
   }
 
-  if (typeof mission === 'function') {
-    config.mission = mission;
+  // If no work was assigned, bail out
+  if (typeof config.mission !== 'string') {
+    throw new TypeError('No `mission` was assigned!');
   }
 
-  // If no work was assigned, bail out
-  if (typeof config.mission !== 'function') {
-    throw new TypeError('No `mission` was assigned!');
+  var missionStats = fs.existsSync(config.mission) === true ? fs.statSync(config.mission) : null;
+  if (!(missionStats && missionStats.isFile())) {
+    throw new TypeError('The assigned `mission` file does not exist');
   }
 
 
@@ -218,7 +219,8 @@ Legion.prototype.toWar = function(mission) {
         staggeredStart: config.staggeredStart,
         reinforce: config.reinforce,
         maxMissionTime: config.maxActiveDutyPerMission,
-        mission: config.mission.toString(),
+        mission: config.mission,
+        orders: orders,
         silent: config.silent === true
       }
     });
