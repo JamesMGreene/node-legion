@@ -37,14 +37,14 @@ var defaultConfig = {
   // single execution of the `mission`. When the limit is reached, the soldier will
   // be forcibly killed if the `mission` has not been completed.
   // Default: `null` (infinite time)
-  maxRunTimePerMission: null,
+  maxActiveDutyPerMission: null,
 
   // The number of milliseconds to use as the maximum allowed run time for the
   // entire process. If you have reinforceing soldiers, they will continue to work
   // until this limit is reached, and then the "Legion" will kill all of its
   // subordinates.
   // Default: `null` (infinite time)
-  maxRunTime: null,
+  maxCommission: null,
 
   // The actual work to do. This MUST be set to a function.
   // IMPORTANT: The closure scope will not be carried forward for the function must be self-contained.
@@ -69,7 +69,18 @@ var startTime,     // The timestamp from when `start` was invoked
 //
 //
 //
-function Legion(options) {
+function Legion() {
+  if (!(this instanceof Legion)) {
+    return new Legion();
+  }
+}
+util.inherits(Legion, EventEmitter);
+
+
+//
+// TO ARMS!!!
+//
+Legion.prototype.prepare = function(options) {
 
   // There can be only one!
   // ...due to the limitations of `cluster`.
@@ -77,8 +88,8 @@ function Legion(options) {
     throw new Error('Cannot create multiple Legion instances!');
   }
 
-  // If no work was assigned, bail out
-  if (options && typeof options.mission !== 'function') {
+  // If no work was assigned, bail out (unless `mission` was not specified at all)
+  if (options && options.hasOwnProperty('mission') && typeof options.mission !== 'function') {
     throw new TypeError('No `mission` was assigned!');
   }
 
@@ -91,7 +102,7 @@ function Legion(options) {
   process.on('exit', function(exitCode) {
     if (!dead) {
       theExitCode = exitCode;
-      suicide.call(this, exitCode);
+      this.surrender(exitCode);
     }
   }.bind(this));
 
@@ -117,7 +128,7 @@ function Legion(options) {
       data: {
         reason: exitCode !== 0 ? 'killed' : 'discharged',
         exitCode: exitCode,
-        duration: Date.now() - centuryStartTimes[century.process.pid]
+        activeDuty: Date.now() - centuryStartTimes[century.process.pid]
       }
     });
 
@@ -137,17 +148,27 @@ function Legion(options) {
     }
   }.bind(this));
 
+  return this;
 };
-util.inherits(Legion, EventEmitter);
 
 
 //
+// TO WAR!!!
 //
-//
-Legion.prototype.toWar = function() {
+Legion.prototype.toWar = function(mission) {
   if (startTime) {
     throw new Error('Do not call `toWar` more than once!');
   }
+
+  if (typeof mission === 'function') {
+    config.mission = mission;
+  }
+
+  // If no work was assigned, bail out
+  if (typeof config.mission !== 'function') {
+    throw new TypeError('No `mission` was assigned!');
+  }
+
 
   // Mark the time
   startTime = Date.now();
@@ -196,36 +217,37 @@ Legion.prototype.toWar = function() {
         stagger: config.stagger,
         staggeredStart: config.staggeredStart,
         reinforce: config.reinforce,
-        maxMissionTime: config.maxRunTimePerMission,
+        maxMissionTime: config.maxActiveDutyPerMission,
         mission: config.mission.toString(),
         silent: config.silent === true
       }
     });
   }
 
-  // Only allow this process chain to run for a max of `maxRunTime` milliseconds
-  if (typeof config.maxRunTime === 'number' && config.maxRunTime > 0) {
-    maxTimeoutId = setTimeout(suicide.bind(this), config.maxRunTime);
+  // Only allow this process chain to run for a max of `maxCommission` milliseconds
+  if (typeof config.maxCommission === 'number' && config.maxCommission > 0) {
+    maxTimeoutId = setTimeout(this.surrender.bind(this), config.maxCommission);
   }
 
+  return this;
 };
 
 
 //
+// All is lost!
 //
-//
-function suicide(exitCode) {
+Legion.prototype.surrender = function(exitCode) {
   // Die, soldiers! Die!
   for (var centuryId in cluster.soldiers) {
     cluster.soldiers[centuryId].kill();
   }
 
-  die.call(this, exitCode);
+  return die.call(this, exitCode);
 };
 
 
 //
-//
+// Whether natural or at the hand of our enemy, we all eventually meet our end.
 //
 function die(exitCode) {
   var wasExitingAlready = typeof theExitCode !== 'number';
@@ -240,7 +262,7 @@ function die(exitCode) {
     data: {
       reason: finalExitCode !== 0 ? 'killed' : 'discharged',
       exitCode: finalExitCode,
-      duration: Date.now() - startTime
+      activeDuty: Date.now() - startTime
     }
   });
 
@@ -256,8 +278,10 @@ function die(exitCode) {
   if (!wasExitingAlready) {
     process.exit(finalExitCode);
   }
+
+  return this;
 };
 
 
 // Export API
-module.exports = Legion;
+module.exports = new Legion();

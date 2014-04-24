@@ -15,9 +15,9 @@ npm install legion
 ## Usage
 
 ```js
-var Legion = require('legion');
-var legion =
-  new Legion({
+var legion = require('legion');
+legion
+  .prepare({
     mission: function() {
       this.emit(
         'Attempting to kill Ptolemy XIII',
@@ -35,10 +35,8 @@ var legion =
     }  
   })
   .on('recruit', console.dir)
-  .on('terminate', console.dir);
-
-// Start
-legion.toWar();
+  .on('terminate', console.dir)
+  .toWar();
 ```
 
 
@@ -74,14 +72,14 @@ var defaultConfig = {
   // single execution of the `mission`. When the limit is reached, the soldier will
   // be forcibly killed if the `mission` has not been completed.
   // Default: `null` (infinite time)
-  maxRunTimePerMission: null,
+  maxActiveDutyPerMission: null,
 
   // The number of milliseconds to use as the maximum allowed run time for the
   // entire process. If you have reinforceing soldiers, they will continue to work
   // until this limit is reached, and then the "Legion" will kill all of its
   // subordinates.
   // Default: `null` (infinite time)
-  maxRunTime: null,
+  maxCommission: null,
 
   // The actual work to do. This MUST be set to a function.
   // IMPORTANT: The closure scope will not be carried forward for the function must be self-contained.

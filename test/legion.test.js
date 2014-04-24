@@ -1,13 +1,13 @@
 // Internal modules
-var Legion = require('../src/legion');
+var legion = require('../src/legion');
 
 
 function dumpMessage(msg) {
   console.log(JSON.stringify(msg));
 }
 
-var legion =
-  new Legion({
+legion
+  .prepare({
     mission: function() {
       this.emit('executing mission');
       setTimeout(this.done.bind(this), 5000);
@@ -17,6 +17,5 @@ var legion =
     silent: false
   })
   .on('recruit', dumpMessage)
-  .on('terminate', dumpMessage);
-
-legion.toWar();
+  .on('terminate', dumpMessage)
+  .toWar();

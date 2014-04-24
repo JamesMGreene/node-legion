@@ -144,7 +144,7 @@ function recruitSoldier() {
       data: {
         reason: exitCode !== 0 ? 'killed' : 'discharged',
         exitCode: exitCode,
-        duration: Date.now() - startTimes[soldier.pid]
+        activeDuty: Date.now() - startTimes[soldier.pid]
       }
     });
 
@@ -179,7 +179,7 @@ function recruitSoldier() {
     }
   });
 
-  // Only allow this process chain to run for a max of `maxRunTime` milliseconds
+  // Only allow this process chain to run for a max of `maxCommission` milliseconds
   if (typeof config.maxMissionTime === 'number' && config.maxMissionTime > 0) {
     maxTimeoutIds[soldier.pid] = setTimeout(function() {
       soldier.kill();
