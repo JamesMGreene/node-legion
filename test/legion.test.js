@@ -1,23 +1,26 @@
 // Internal modules
-var legion = require('../legion');
+var Legion = require('../legion');
 
 
 function dumpMessage(msg) {
   console.log(JSON.stringify(msg));
 }
 
-legion
-  .prepare({
-    mission: require.resolve('./mission'),
+var legion =
+  new Legion({
+    taskScript: require.resolve('./task'),
     stagger: true,
     staggeredStart: 2500,
+    maxWorkerTime: 2500,
+    maxTime: 10000,
     silent: false
   })
-  .on('recruit', dumpMessage)
-  .on('terminate', dumpMessage)
-  .toWar({
-    missionParameters: 'whatever data',
+  .on('start', dumpMessage)
+  .on('end', dumpMessage)
+  .on('error', dumpMessage)
+  .run({
+    taskParameters: 'whatever data',
     secretObjective: 'you want to send',
-    exitConditions: 'to your soldiers',
-    dirtyJoke: 'can be passed as an object to `toWar`'
+    exitConditions: 'to your workers',
+    dirtyJoke: 'can be passed as an object to `run`'
   });

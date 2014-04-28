@@ -1,8 +1,8 @@
 // Core modules
 var fs = require('fs');
 var os = require('os');
-var cluster = require('cluster');
 var util = require('util');
+var child_process = require('child_process');
 var EventEmitter = require('events').EventEmitter;
 
 // Userland modules
@@ -11,45 +11,41 @@ var extend = require('node.extend');
 
 var defaultConfig = {
 
-  // The number of centuries.
+  // The number of concurrent Workers.
   // Default: `require('os').cpus().length` (1 per CPU)
-  maxCenturies: os.cpus().length,
+  maxWorkers: os.cpus().length,
 
-  // The maximum number of concurrent soldiers per century.
-  // Default: `8`.
-  maxSoldiersPerCentury: 8,
-
-  // Should the initial creation of soldiers be staggered?
+  // Should the initial creation of workers be staggered?
   // Default: `false`.
   stagger: false,
 
-  // The number of milliseconds to use as a staggered start time for soldiers.
+  // The number of milliseconds to use as a staggered start time for workers.
   // Only relevant if `stagger` is set to `true`.
   // Default: `5000` (5 seconds).
   staggeredStart: 5000,
 
-  // When one soldier finishes, should a new soldier "take the next shift"?
+  // When one worker finishes, should a new worker "take the next shift"?
   // Note that if `stagger` is set to `true`, reinforcements will continue to
   // honor the `staggeredStart` delay.
   // Default: `true`.
-  reinforce: true,
+  continuous: true,
 
   // The number of milliseconds to use as the maximum allowed run time for a
-  // single execution of the `mission`. When the limit is reached, the soldier will
-  // be forcibly killed if the `mission` has not been completed.
+  // single execution of the `task`. When the limit is reached, the worker will
+  // be forcibly killed if the `task` has not been completed.
   // Default: `null` (infinite time)
-  maxActiveDutyPerMission: null,
+  maxWorkerTime: null,
 
   // The number of milliseconds to use as the maximum allowed run time for the
-  // entire process. If you have reinforceing soldiers, they will continue to work
+  // entire process. If you have reinforceing workers, they will continue to work
   // until this limit is reached, and then the "Legion" will kill all of its
   // subordinates.
   // Default: `null` (infinite time)
-  maxCommission: null,
+  maxTime: null,
 
   // The actual work to do. This MUST be set to an existing file path.
   // Default: `null`.
-  mission: null,
+  taskScript: null,
 
   // Suppress all stdio from child processes
   // Default: `true`.
@@ -58,190 +54,56 @@ var defaultConfig = {
 };
 
 
-var startTime,     // The timestamp from when `start` was invoked
-    maxTimeoutId,  // The ID of the timeout that manages the total duration
-    config,        // The active config for the Legion and all its subordinates
-    theExitCode,   // Keep track of if the process is already exiting
-    dead,          // Keep track of if the process is already been deemed dead
-    centuryStartTimes = {};  // Timestamps of start for each century (informational only)
-
-
-//
-//
-//
-function Legion() {
-  if (!(this instanceof Legion)) {
-    return new Legion();
-  }
-}
-util.inherits(Legion, EventEmitter);
-
-
 //
 // TO ARMS!!!
 //
-Legion.prototype.prepare = function(options) {
-
-  // There can be only one!
-  // ...due to the limitations of `cluster`.
-  if (config) {
-    throw new Error('Cannot create multiple Legion instances!');
+function Legion(options) {
+  // Ensure that `this` becomes an instance of `Legion`
+  if (!(this instanceof Legion)) {
+    return new Legion(options);
   }
 
-  // If no work was assigned, bail out (unless `mission` was not specified at all)
-  if (options && options.hasOwnProperty('mission') && typeof options.mission !== 'string') {
-    throw new TypeError('No `mission` was assigned!');
+  // If no work was assigned, bail out (unless `taskScript` was not specified at all)
+  if (options && options.hasOwnProperty('taskScript') && typeof options.taskScript !== 'string') {
+    throw new TypeError('No `taskScript` was assigned!');
   }
-
 
   // Merge any user-overridden configuration
-  config = extend({}, defaultConfig, options);
+  this._privateData = {
+    startTime: null,      // The timestamp from when `start` was invoked
+    maxTimeoutId: null,   // The ID of the timeout that manages the total duration
+    theExitCode: null,    // Keep track of if the process is already exiting
+    alreadyDead: null,    // Keep track of if the process is already been deemed dead
+    workers: {},          // Keep track of the workers
+    workerStartTimes: {}, // Timestamps of start for each worker (informational only)
+    workerTimeoutIds: {}, // Keep track of worker duration timeouts
+    config: extend({}, defaultConfig, options)
+  };
 
 
   // If the Node process is killed...
   process.on('exit', function(exitCode) {
-    if (!dead) {
-      theExitCode = exitCode;
-      this.surrender(exitCode);
+    if (!this._privateData.alreadyDead) {
+      this._privateData.theExitCode = exitCode;
+      this.exit(exitCode);
     }
   }.bind(this));
 
-
-  // Configure the future cluster of Centuries
-  cluster.setupMaster({
-    exec:   require.resolve('./century'),
-    args:   [],
-    silent: config.silent === true
-  });
-
-
-  // When a Century is terminated...
-  cluster.on('exit', function(century, exitCode, signal) {
-    exitCode = typeof exitCode === 'number' ? exitCode : signal ? 128: 0;
-
-    // Sound the death knell
-    this.emit('terminate', {
-      type: 'terminate',
-      role: 'century',
-      id: century.process.pid,
-      group: process.pid,
-      data: {
-        reason: exitCode !== 0 ? 'killed' : 'discharged',
-        exitCode: exitCode,
-        activeDuty: Date.now() - centuryStartTimes[century.process.pid]
-      }
-    });
-
-    // Cleanup metadata
-    delete centuryStartTimes[century.process.pid];
-
-    var hasCenturiesLeft = false;
-    for (var centuryId in cluster.soldiers) {
-      if (cluster.soldiers[centuryId].process.pid !== century.process.pid) {
-        hasCenturiesLeft = true;
-        break;
-      }
-    }
-
-    if (!hasCenturiesLeft) {
-      die.call(this, exitCode);
-    }
+  process.on('uncaughtException', function(err) {
+    this.emit('error', err);
+    this.exit(1);
   }.bind(this));
-
-  return this;
 };
-
-
-//
-// TO WAR!!!
-//
-Legion.prototype.toWar = function(orders) {
-  if (startTime) {
-    throw new Error('Do not call `toWar` more than once!');
-  }
-
-  // If no work was assigned, bail out
-  if (typeof config.mission !== 'string') {
-    throw new TypeError('No `mission` was assigned!');
-  }
-
-  var missionStats = fs.existsSync(config.mission) === true ? fs.statSync(config.mission) : null;
-  if (!(missionStats && missionStats.isFile())) {
-    throw new TypeError('The assigned `mission` file does not exist');
-  }
-
-
-  // Mark the time
-  startTime = Date.now();
-
-  // Build your legion!
-  this.emit('recruit', {
-    type: 'recruit',
-    role: 'legion',
-    id: process.pid,
-    group: null,
-    data: {}
-  });
-
-  // Form your centuries!
-  var century, centuryPid;
-  for (var i = 0, len = config.maxCenturies; i < len; i++) {
-    century = cluster.fork();
-    centuryPid = century.process.pid;
-
-    // Record the employment
-    this.emit('recruit', {
-      type: 'recruit',
-      role: 'century',
-      id: centuryPid,
-      group: process.pid,
-      data: {}
-    });
-
-    // Sir, I beseech you: listen to the soldiers!
-    century.on('message', function(msg) {
-      if (msg && msg.type && /^(century|soldier)$/.test(msg.role)) {
-        this.emit(msg.type, msg);
-      }
-    }.bind(this));
-
-    centuryStartTimes[centuryPid] = Date.now();
-
-    // Cascade of recruitment!
-    century.send({
-      type: 'recruit',
-      role: 'century',
-      id: centuryPid,
-      group: process.pid,
-      config: {
-        maxSoldiers: config.maxSoldiersPerCentury,
-        stagger: config.stagger,
-        staggeredStart: config.staggeredStart,
-        reinforce: config.reinforce,
-        maxMissionTime: config.maxActiveDutyPerMission,
-        mission: config.mission,
-        orders: orders,
-        silent: config.silent === true
-      }
-    });
-  }
-
-  // Only allow this process chain to run for a max of `maxCommission` milliseconds
-  if (typeof config.maxCommission === 'number' && config.maxCommission > 0) {
-    maxTimeoutId = setTimeout(this.surrender.bind(this), config.maxCommission);
-  }
-
-  return this;
-};
+util.inherits(Legion, EventEmitter);
 
 
 //
 // All is lost!
 //
-Legion.prototype.surrender = function(exitCode) {
-  // Die, soldiers! Die!
-  for (var centuryId in cluster.soldiers) {
-    cluster.soldiers[centuryId].kill();
+Legion.prototype.exit = function(exitCode) {
+  // Die, workers! Die!
+  for (var workerId in this._privateData.workers) {
+    this._privateData.workers[workerId].kill('SIGINT');
   }
 
   return die.call(this, exitCode);
@@ -249,32 +111,222 @@ Legion.prototype.surrender = function(exitCode) {
 
 
 //
+// TO WAR!!!
+//
+Legion.prototype.run = function(instructions) {
+  if (this._privateData.startTime) {
+    throw new Error('Do not call `run` more than once!');
+  }
+
+  // Mark the time
+  this._privateData.startTime = Date.now();
+
+  // Local reference
+  var config = this._privateData.config;
+
+  // If no task was assigned, bail out
+  if (typeof config.taskScript !== 'string') {
+    throw new TypeError('No `taskScript` was assigned!');
+  }
+
+  var taskStats = fs.existsSync(config.taskScript) === true ? fs.statSync(config.taskScript) : null;
+  if (!(taskStats && taskStats.isFile())) {
+    throw new TypeError('The assigned `taskScript` file does not exist');
+  }
+
+  // Build your legion!
+  this.emit('start', {
+    type: 'start',
+    role: 'legion',
+    id: process.pid,
+    owner: null,
+    data: null
+  });
+
+  // Prepare to create Workers...
+  var doNotStagger = !(config.stagger === true && typeof config.staggeredStart === 'number' && config.staggeredStart >= 0);
+  var createWorkerFn = createWorker.bind(this, instructions);
+
+  // Create Workers
+  for (var i = 0, len = config.maxWorkers; i < len; i++) {
+    if (doNotStagger) {
+      createWorkerFn();
+    }
+    else {
+      setTimeout(createWorkerFn, (i * config.staggeredStart));
+    }
+  }
+
+  // Only allow this process chain to run for a max of `maxTime` milliseconds
+  if (typeof config.maxTime === 'number' && config.maxTime > 0) {
+    this._privateData.maxTimeoutId = setTimeout(this.exit.bind(this), config.maxTime);
+  }
+
+  return this;
+};
+
+
+function createWorker(instructions) {
+
+  // Prepare to create Workers...
+  var config = this._privateData.config;
+  var doNotStagger = !(config.stagger === true && typeof config.staggeredStart === 'number' && config.staggeredStart >= 0);
+  var createWorkerFn = createWorker.bind(this);
+
+  // Mark the time
+  var workerStartTime = Date.now();
+
+  // Fork the child_process
+  var worker = child_process.fork(
+    require.resolve('./worker'),
+    [config.taskScript],
+    { silent: config.silent === true }
+  );
+
+  var workerPid = worker.pid;
+
+  // When a Worker is terminated...
+  worker.on('exit', destroyWorker.bind(this, worker));
+
+  // When a Worker makes a mistake...
+  worker.on('error', function(err) {
+    console.error('Worker ERROR!');
+    console.dir(err);
+  });
+
+  // Sir, I beseech you: listen to the workers!
+  worker.on('message', function(msg) {
+    if (msg && msg.type && msg.role === 'worker') {
+      this.emit(msg.type, msg);
+    }
+  }.bind(this));
+
+
+  // Store the marked time
+  this._privateData.workerStartTimes[workerPid] = workerStartTime;
+
+  // Store a timer, if required
+  if (typeof config.maxWorkerTime === 'number' && config.maxWorkerTime > 0) {
+    this._privateData.workerTimeoutIds[workerPid] = setTimeout(worker.kill.bind(worker, 'SIGINT'), config.maxWorkerTime);
+  }
+  
+  // Store the child_process reference
+  this._privateData.workers[workerPid] = worker;
+
+  // Record the worker's employment
+  this.emit('start', {
+    type: 'start',
+    role: 'worker',
+    id: workerPid,
+    owner: process.pid,
+    data: null
+  });
+
+  // Tell the Worker to get to work [if it hasn't already]!
+  worker.send({
+    type: 'start',
+    role: 'worker',
+    id: workerPid,
+    owner: process.pid,
+    data: instructions
+  });
+
+  return this;
+}
+
+
+function destroyWorker(worker, exitCode, signal) {
+  exitCode = typeof exitCode === 'number' ? exitCode : signal ? 128: 0;
+
+  var config = this._privateData.config;
+  var workerPid = worker.pid;
+
+  // Sound the death knell
+  this.emit('end', {
+    type: 'end',
+    role: 'worker',
+    id: workerPid,
+    owner: process.pid,
+    data: {
+      reason: exitCode !== 0 ? 'fired' : 'quit',
+      exitCode: exitCode,
+      duration: Date.now() - this._privateData.workerStartTimes[workerPid]
+    }
+  });
+
+  // See if there are other workers remaining
+  var hasWorkersLeft = false;
+  for (var workerId in this._privateData.workers) {
+    if (this._privateData.workers[workerId].pid !== workerPid) {
+      hasWorkersLeft = true;
+      break;
+    }
+  }
+
+
+  // Clear any remaining timeouts
+  var workerTimeoutId = this._privateData.workerTimeoutIds[workerPid];
+  if (workerTimeoutId) {
+    clearTimeout(workerTimeoutId);
+    workerTimeoutId = null;
+  }
+
+  // Clean up storage
+  delete this._privateData.workerStartTimes[workerPid];
+  delete this._privateData.workerTimeoutIds[workerPid];
+  delete this._privateData.workers[workerPid];
+
+  // Reinforcements!!! Rise from the ashes!
+  // Create another Worker process when one Worker exits.
+  if (config.continuous === true) {
+    var createWorkerFn = createWorker.bind(this);
+    if (config.stagger === true && typeof config.staggeredStart === 'number' && config.staggeredStart >= 0) {
+      setTimeout(createWorkerFn, config.staggeredStart);
+    }
+    else {
+      process.nextTick(createWorkerFn);
+    }
+  }
+  // Legion itself should bail out if no workers remain
+  else if (!hasWorkersLeft) {
+    die.call(this, exitCode);
+  }
+}
+
+
+//
 // Whether natural or at the hand of our enemy, we all eventually meet our end.
 //
 function die(exitCode) {
+  var theExitCode = this._privateData.theExitCode;
   var wasExitingAlready = typeof theExitCode !== 'number';
   var finalExitCode = wasExitingAlready ? theExitCode : typeof exitCode === 'number' ? exitCode : 0;
 
   // Sound the death knell
-  this.emit('terminate', {
-    type: 'terminate',
+  this.emit('end', {
+    type: 'end',
     role: 'legion',
     id: process.pid,
-    group: null,
+    owner: null,
     data: {
-      reason: finalExitCode !== 0 ? 'killed' : 'discharged',
+      reason: finalExitCode !== 0 ? 'fired' : 'quit',
       exitCode: finalExitCode,
-      activeDuty: Date.now() - startTime
+      duration: Date.now() - this._privateData.startTime
     }
   });
 
-  // Empty out all of the global tracking variables
-  clearTimeout(maxTimeoutId);
-  maxTimeoutId = null;
-  startTime = null;
-  config = null;
-  theExitCode = null;
-  dead = true;
+  // Clear any timeouts
+  var maxTimeoutId = this._privateData.maxTimeoutId;
+  if (maxTimeoutId) {
+    clearTimeout(maxTimeoutId);
+    maxTimeoutId = null;
+  }
+  delete this._privateData.maxTimeoutId;
+  
+  // Clean up
+  this._privateData.startTime = null;
+  this._privateData.theExitCode = null;
+  this._privateData.alreadyDead = true;
 
   // Exit forcibly but only if someone else didn't already invoke the exit
   if (!wasExitingAlready) {
@@ -286,4 +338,4 @@ function die(exitCode) {
 
 
 // Export API
-module.exports = new Legion();
+module.exports = Legion;
