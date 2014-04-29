@@ -186,7 +186,10 @@ function createWorker(instructions) {
   var workerPid = worker.pid;
 
   // When a Worker is terminated...
-  worker.on('exit', destroyWorker.bind(this, worker));
+  var destoryWorkerFn = destroyWorker.bind(this, worker);
+  worker.on('exit', function() {
+    destoryWorkerFn.apply(this, Array.prototype.slice.call(arguments, 0).concat([instructions]));
+  }.bind(this));
 
   // When a Worker makes a mistake...
   worker.on('error', function(err) {
@@ -235,7 +238,7 @@ function createWorker(instructions) {
 }
 
 
-function destroyWorker(worker, exitCode, signal) {
+function destroyWorker(worker, exitCode, signal, instructions) {
   exitCode = typeof exitCode === 'number' ? exitCode : signal ? 128: 0;
 
   var config = this._privateData.config;
@@ -279,7 +282,7 @@ function destroyWorker(worker, exitCode, signal) {
   // Reinforcements!!! Rise from the ashes!
   // Create another Worker process when one Worker exits.
   if (config.continuous === true) {
-    var createWorkerFn = createWorker.bind(this);
+    var createWorkerFn = createWorker.bind(this, instructions);
     if (config.stagger === true && typeof config.staggeredStart === 'number' && config.staggeredStart >= 0) {
       setTimeout(createWorkerFn, config.staggeredStart);
     }

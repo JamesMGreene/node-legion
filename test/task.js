@@ -22,9 +22,6 @@ process.on('error', function(err) {
     'err': {
       'name': err.name || 'Error',
       'message': err.message || '',
-      'fileName': err.fileName || '',
-      'lineNumber': err.lineNumber || 0,
-      'columnNumber': err.columnNumber || 0,
       'stack': err.stack || ''
     }
   });
