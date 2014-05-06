@@ -199,9 +199,10 @@ function createWorker(instructions) {
   var workerPid = worker.pid;
 
   // When a Worker is terminated...
-  var destoryWorkerFn = destroyWorker.bind(this, worker);
+  var destroyWorkerFn = destroyWorker.bind(this, worker);
   worker.on('exit', function() {
-    destoryWorkerFn.apply(this, Array.prototype.slice.call(arguments, 0).concat([instructions]));
+    console.log('Worker is about to self-destruct...')
+    destroyWorkerFn.apply(this, Array.prototype.slice.call(arguments, 0).concat([instructions]));
   }.bind(this));
 
   // When a Worker makes a mistake...
