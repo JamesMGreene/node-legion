@@ -148,6 +148,14 @@ Legion.prototype.run = function(instructions) {
     data: null
   });
 
+  // Keep the configuration clean
+  if (typeof config.initialWorkers !== 'number' || isNaN(config.initialWorkers) || config.initialWorkers < 0) {
+    config.initialWorkers = 0;
+  }
+  if (typeof config.maxWorkers !== 'number' || isNaN(config.maxWorkers) || config.maxWorkers < 0) {
+    throw new TypeError('The assigned `maxWorkers` value is not positive integer!');
+  }
+
   // Prepare to create Workers...
   var doNotStagger = !(config.stagger === true && typeof config.staggeredStart === 'number' && config.staggeredStart >= 0);
   var createWorkerFn = createWorker.bind(this, instructions);
@@ -159,8 +167,9 @@ Legion.prototype.run = function(instructions) {
   }
 
   // Create more Workers!
-  if (config.initialWorkers < config.maxWorkers) {
-    for (i = config.initialWorkers, len = config.maxWorkers; i < len; i++) {
+  var remainingWorkers = config.maxWorkers - config.initialWorkers;
+  if (remainingWorkers > 0) {
+    for (i = 0; i < remainingWorkers; i++) {
       if (doNotStagger) {
         createWorkerFn();
       }
