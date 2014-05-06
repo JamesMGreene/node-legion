@@ -11,7 +11,12 @@ var extend = require('node.extend');
 
 var defaultConfig = {
 
-  // The number of concurrent Workers.
+  // The initial number of concurrent Workers.
+  // This initial pool of Workers will not honor the `stagger`, if any.
+  // Default: `0`
+  initialWorkers: 0,
+
+  // The maximum number of concurrent Workers.
   // Default: `require('os').cpus().length` (1 per CPU)
   maxWorkers: os.cpus().length,
 
@@ -147,13 +152,20 @@ Legion.prototype.run = function(instructions) {
   var doNotStagger = !(config.stagger === true && typeof config.staggeredStart === 'number' && config.staggeredStart >= 0);
   var createWorkerFn = createWorker.bind(this, instructions);
 
-  // Create Workers
-  for (var i = 0, len = config.maxWorkers; i < len; i++) {
-    if (doNotStagger) {
-      createWorkerFn();
-    }
-    else {
-      setTimeout(createWorkerFn, (i * config.staggeredStart));
+  // Create initial Workers
+  for (var i = 0, len = config.initialWorkers; i < len; i++) {
+    createWorkerFn();
+  }
+
+  // Create more Workers!
+  if (config.initialWorkers < config.maxWorkers) {
+    for (var i = config.initialWorkers, len = config.maxWorkers; i < len; i++) {
+      if (doNotStagger) {
+        createWorkerFn();
+      }
+      else {
+        setTimeout(createWorkerFn, (i * config.staggeredStart));
+      }
     }
   }
 
