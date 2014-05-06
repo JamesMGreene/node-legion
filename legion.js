@@ -153,13 +153,14 @@ Legion.prototype.run = function(instructions) {
   var createWorkerFn = createWorker.bind(this, instructions);
 
   // Create initial Workers
-  for (var i = 0, len = config.initialWorkers; i < len; i++) {
+  var i, len;
+  for (i = 0, len = config.initialWorkers; i < len; i++) {
     createWorkerFn();
   }
 
   // Create more Workers!
   if (config.initialWorkers < config.maxWorkers) {
-    for (var i = config.initialWorkers, len = config.maxWorkers; i < len; i++) {
+    for (i = config.initialWorkers, len = config.maxWorkers; i < len; i++) {
       if (doNotStagger) {
         createWorkerFn();
       }
