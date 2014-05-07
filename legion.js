@@ -167,14 +167,16 @@ Legion.prototype.run = function(instructions) {
   }
 
   // Create more Workers!
-  var remainingWorkers = config.maxWorkers - config.initialWorkers;
+  var remainingWorkers = config.maxWorkers - config.initialWorkers,
+      waitTime = config.initialWorkers > 0 ? config.staggeredStart : 0;
   if (remainingWorkers > 0) {
     for (i = 0; i < remainingWorkers; i++) {
       if (doNotStagger) {
         createWorkerFn();
       }
       else {
-        setTimeout(createWorkerFn, (i * config.staggeredStart));
+        waitTime += config.staggeredStart;
+        setTimeout(createWorkerFn, waitTime);
       }
     }
   }
