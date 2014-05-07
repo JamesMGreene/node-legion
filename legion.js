@@ -86,7 +86,15 @@ function Legion(options) {
   };
 
 
-  // If the Node process is killed...
+  // Listen for terminal signal events and then force-exit the process
+  var boundExit = function() {
+    process.exit(1);
+  };
+  process.on('SIGTERM', boundExit);
+  process.on('SIGINT', boundExit);
+  process.on('SIGHUP', boundExit);
+
+  // If the Node process is exiting...
   process.on('exit', function(exitCode) {
     if (!this._privateData.alreadyDead) {
       this._privateData.theExitCode = exitCode;
