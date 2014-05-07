@@ -16,7 +16,6 @@ requireModify(_taskScriptPath, function(source) {
 
 
 function modifyProcessFn() {
-  debugger;
   //
   // If in a child process [as expected] and we have a valid `taskScript`...
   //
@@ -34,7 +33,6 @@ function modifyProcessFn() {
     // If the Legion tells you that you're hired, get to work!
     //
     process.on('message', function starter(msg) {
-      debugger;
       if (msg && msg.type === 'start' && msg.role === 'worker') {
         _owner = msg.owner || null;
         var instructions = (msg && msg.data) || undefined;
@@ -51,11 +49,21 @@ function modifyProcessFn() {
 
 
     //
+    // Listen for terminal signal events and then force-exit the process
+    //
+    var boundExit = function() {
+      process.exit(1);
+    };
+    process.on('SIGTERM', boundExit);
+    process.on('SIGINT', boundExit);
+    process.on('SIGHUP', boundExit);
+
+
+    //
     // Forward a copy of all emissions to the listening parent process
     //
     process.emit = function(eventName) {
       // Send the emission to the parent process
-      debugger;
       if (typeof eventName === 'string' && eventName && eventName !== 'newListener' && eventName !== 'removeListener') {
         var eventData = arguments.length > 2 ? Array.prototype.slice.call(arguments, 1) : arguments[1];
         process.send({
