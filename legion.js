@@ -183,8 +183,8 @@ Legion.prototype.run = function(instructions) {
         createWorkerFn();
       }
       else {
-        waitTime += config.staggeredStart;
         setTimeout(createWorkerFn, waitTime);
+        waitTime += config.staggeredStart;
       }
     }
   }
