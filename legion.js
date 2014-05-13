@@ -7,6 +7,7 @@ var EventEmitter = require('events').EventEmitter;
 
 // Userland modules
 var extend = require('node.extend');
+var safe = require('safetimeout');
 
 
 var defaultConfig = {
@@ -183,7 +184,7 @@ Legion.prototype.run = function(instructions) {
         createWorkerFn();
       }
       else {
-        setTimeout(createWorkerFn, waitTime);
+        safe.setTimeout(createWorkerFn, waitTime);
         waitTime += config.staggeredStart;
       }
     }
@@ -191,7 +192,7 @@ Legion.prototype.run = function(instructions) {
 
   // Only allow this process chain to run for a max of `maxTime` milliseconds
   if (typeof config.maxTime === 'number' && config.maxTime > 0) {
-    this._privateData.maxTimeoutId = setTimeout(this.exit.bind(this), config.maxTime);
+    this._privateData.maxTimeoutId = safe.setTimeout(this.exit.bind(this), config.maxTime);
   }
 
   return this;
@@ -243,7 +244,7 @@ function createWorker(instructions) {
 
   // Store a timer, if required
   if (typeof config.maxWorkerTime === 'number' && config.maxWorkerTime > 0) {
-    this._privateData.workerTimeoutIds[workerPid] = setTimeout(worker.kill.bind(worker, 'SIGINT'), config.maxWorkerTime);
+    this._privateData.workerTimeoutIds[workerPid] = safe.setTimeout(worker.kill.bind(worker, 'SIGINT'), config.maxWorkerTime);
   }
   
   // Store the child_process reference
@@ -303,7 +304,7 @@ function destroyWorker(worker, exitCode, signal, instructions) {
   // Clear any remaining timeouts
   var workerTimeoutId = this._privateData.workerTimeoutIds[workerPid];
   if (workerTimeoutId) {
-    clearTimeout(workerTimeoutId);
+    safe.clearTimeout(workerTimeoutId);
     workerTimeoutId = null;
   }
 
@@ -317,7 +318,7 @@ function destroyWorker(worker, exitCode, signal, instructions) {
   if (config.continuous === true) {
     var createWorkerFn = createWorker.bind(this, instructions);
     if (config.stagger === true && typeof config.staggeredStart === 'number' && config.staggeredStart >= 0) {
-      setTimeout(createWorkerFn, config.staggeredStart);
+      safe.setTimeout(createWorkerFn, config.staggeredStart);
     }
     else {
       process.nextTick(createWorkerFn);
@@ -354,7 +355,7 @@ function die(exitCode) {
   // Clear any timeouts
   var maxTimeoutId = this._privateData.maxTimeoutId;
   if (maxTimeoutId) {
-    clearTimeout(maxTimeoutId);
+    safe.clearTimeout(maxTimeoutId);
     maxTimeoutId = null;
   }
   delete this._privateData.maxTimeoutId;

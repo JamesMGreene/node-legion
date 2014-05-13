@@ -1,6 +1,6 @@
 {
   "name": "legion",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "\"I am Legion, for we are many.\" Raise a legion of Node worker processes to do your bidding.",
   "main": "./legion.js",
   "repository": {
@@ -29,7 +29,7 @@
   "author": {
     "name": "James M. Greene",
     "email": "james.m.greene@gmail.com",
-    "url": "http://jamesgreene.net/)"
+    "url": "http://jamesgreene.net/"
   },
   "license": "MIT",
   "bugs": {
@@ -38,6 +38,7 @@
   "homepage": "https://github.com/JamesMGreene/node-legion",
   "dependencies": {
     "node.extend": "^1.0.10",
-    "require-modify": "^0.1.0"
+    "require-modify": "^0.1.0",
+    "safetimeout": "^0.1.0"
   }
 }
