@@ -88,12 +88,13 @@ function Legion(options) {
 
 
   // Listen for terminal signal events and then force-exit the process
-  var boundExit = function() {
-    process.exit(1);
+  var boundExit = function(signal) {
+    this.emit('log', 'Legion received terminal signal "' + signal + '"');
+    this.exit(1);
   };
-  process.on('SIGTERM', boundExit);
-  process.on('SIGINT', boundExit);
-  process.on('SIGHUP', boundExit);
+  process.on('SIGTERM', boundExit.bind(this, 'SIGTERM'));
+  process.on('SIGINT', boundExit.bind(this, 'SIGINT'));
+  process.on('SIGHUP', boundExit.bind(this, 'SIGHUP'));
 
   // If the Node process is exiting...
   process.on('exit', function(exitCode) {
@@ -116,8 +117,38 @@ util.inherits(Legion, EventEmitter);
 //
 Legion.prototype.exit = function(exitCode) {
   // Die, workers! Die!
+  var worker, workerPid;
   for (var workerId in this._privateData.workers) {
-    this._privateData.workers[workerId].kill('SIGINT');
+    worker = this._privateData.workers[workerId];
+    workerPid = worker.pid;
+    worker.kill('SIGINT');
+
+    // The above `kill` calls will NOT react synchronously, so
+    // we also need to manually announce the Workers' exit for them
+    // before they ACTUALLY exit
+    this.emit('end', {
+      type: 'end',
+      role: 'worker',
+      id: workerPid,
+      owner: process.pid,
+      data: {
+        reason: exitCode !== 0 ? 'fired' : 'quit',
+        exitCode: exitCode,
+        duration: Date.now() - this._privateData.workerStartTimes[workerPid]
+      }
+    });
+
+    // Clear any remaining timeouts
+    var workerTimeoutId = this._privateData.workerTimeoutIds[workerPid];
+    if (workerTimeoutId) {
+      safe.clearTimeout(workerTimeoutId);
+      workerTimeoutId = null;
+    }
+
+    // Clean up storage
+    delete this._privateData.workerStartTimes[workerPid];
+    delete this._privateData.workerTimeoutIds[workerPid];
+    delete this._privateData.workers[workerPid];
   }
 
   return die.call(this, exitCode);
@@ -250,23 +281,19 @@ function createWorker(instructions) {
   // Store the child_process reference
   this._privateData.workers[workerPid] = worker;
 
-  // Record the worker's employment
-  this.emit('start', {
-    type: 'start',
-    role: 'worker',
-    id: workerPid,
-    owner: process.pid,
-    data: null
-  });
-
-  // Tell the Worker to get to work [if it hasn't already]!
-  worker.send({
+  var startData = {
     type: 'start',
     role: 'worker',
     id: workerPid,
     owner: process.pid,
     data: instructions
-  });
+  };
+
+  // Record the worker's employment
+  this.emit('start', startData);
+
+  // Tell the Worker to get to work [if it hasn't already]!
+  worker.send(startData);
 
   return this;
 }
@@ -336,7 +363,7 @@ function destroyWorker(worker, exitCode, signal, instructions) {
 //
 function die(exitCode) {
   var theExitCode = this._privateData.theExitCode;
-  var wasExitingAlready = typeof theExitCode !== 'number';
+  var wasExitingAlready = typeof theExitCode === 'number';
   var finalExitCode = wasExitingAlready ? theExitCode : typeof exitCode === 'number' ? exitCode : 0;
 
   // Sound the death knell

@@ -54,9 +54,13 @@ function modifyProcessFn() {
     var boundExit = function() {
       process.exit(1);
     };
-    process.on('SIGTERM', boundExit);
-    process.on('SIGINT', boundExit);
-    process.on('SIGHUP', boundExit);
+    var boundExit = function(signal) {
+      process.emit('log', { source: 'process', data: ['Worker received terminal signal "' + signal + '"'] });
+      process.exit(1);
+    };
+    process.on('SIGTERM', boundExit.bind(process, 'SIGTERM'));
+    process.on('SIGINT', boundExit.bind(process, 'SIGINT'));
+    process.on('SIGHUP', boundExit.bind(process, 'SIGHUP'));
 
 
     //
@@ -65,13 +69,13 @@ function modifyProcessFn() {
     process.emit = function(eventName) {
       // Send the emission to the parent process
       if (typeof eventName === 'string' && eventName && eventName !== 'newListener' && eventName !== 'removeListener') {
-        var eventData = arguments.length > 2 ? Array.prototype.slice.call(arguments, 1) : arguments[1];
+        var eventData = Array.prototype.slice.call(arguments, 1);
         process.send({
           type: eventName,
           role: 'worker',
           id: process.pid,
           owner: _owner,
-          data: typeof eventData !== 'undefined' ? eventData : null
+          data: eventData
         });
       }
 
